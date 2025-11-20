@@ -1,4 +1,4 @@
-package consistenhash
+package consistenthash
 
 import (
 	"hash/crc32"
@@ -6,11 +6,10 @@ import (
 	"strconv"
 )
 
+// Hash maps bytes to uint32
 type Hash func(data []byte) uint32
 
-// 正常来说，先实现哈希一致性算法，事实上就是crc32这个包就解决了
-// 然后为了防止数据倾斜，引入replicas，并且计算replica的哈希值
-// 从小到大放入keys，并且引入一个hashmap指向真实的key
+// Map constains all hashed keys
 type Map struct {
 	hash     Hash
 	replicas int
@@ -18,23 +17,22 @@ type Map struct {
 	hashMap  map[int]string
 }
 
-func New(replicas int, hashFunc Hash) *Map {
-	mapping := &Map{
+// New creates a Map instance
+func New(replicas int, fn Hash) *Map {
+	m := &Map{
 		replicas: replicas,
-		hash:     hashFunc,
+		hash:     fn,
 		hashMap:  make(map[int]string),
 	}
-
-	if mapping.hash == nil {
-		mapping.hash = crc32.ChecksumIEEE
+	if m.hash == nil {
+		m.hash = crc32.ChecksumIEEE
 	}
-	return mapping
+	return m
 }
 
+// Add adds some keys to the hash.
 func (m *Map) Add(keys ...string) {
-
 	for _, key := range keys {
-		//函数允许传入 0 或 多个真实节点的名称。
 		for i := 0; i < m.replicas; i++ {
 			hash := int(m.hash([]byte(strconv.Itoa(i) + key)))
 			m.keys = append(m.keys, hash)
@@ -44,13 +42,14 @@ func (m *Map) Add(keys ...string) {
 	sort.Ints(m.keys)
 }
 
+// Get gets the closest item in the hash to the provided key.
 func (m *Map) Get(key string) string {
 	if len(m.keys) == 0 {
 		return ""
 	}
 
 	hash := int(m.hash([]byte(key)))
-
+	// Binary search for appropriate replica.
 	idx := sort.Search(len(m.keys), func(i int) bool {
 		return m.keys[i] >= hash
 	})
